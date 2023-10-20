@@ -72,11 +72,13 @@ target/
 # Spyder
 .spyproject/
 
-# Jupyter NB Checkpoints
+# Jupyter NB 
 .ipynb_checkpoints/
 
 # exclude data from source control by default
-/data/
+/data
+
+!/src/data/*
 
 # Mac OS-specific storage files
 .DS_Store
@@ -87,6 +89,3 @@ target/
 
 # Mypy cache
 .mypy_cache/
-
-# Data
-data
