@@ -4,6 +4,19 @@ from torchvision.datasets import ImageFolder
 from torchvision.io import read_image
 import pandas as pd
 import os
+from PIL import Image
+
+# Class for colors
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
 # Create class for custom dataset
 class CustomImageDataset(Dataset):
@@ -31,7 +44,7 @@ class CustomImageDataset(Dataset):
     def __len__(self):
 
         # Len of the dataset
-        return len(self.train_dict)
+        return len(self.all_files)
 
     def __getitem__(self, idx):   
         
@@ -55,9 +68,15 @@ class CustomImageDataset(Dataset):
         # Define path to image    
         img_path = os.path.join(self.root_dir,file_name)
 
-        # Read image
-        img = read_image(img_path)
+        # Read image as PIL Image
+        img = Image.open(img_path).convert('L')  # 'L' mode for grayscale
+
+        # Apply transformation if it exists
+        # HERE IS THE ERRORRRRR    
+        if self.transform:
+            img = self.transform(img)
 
         # Get labels
         return img, torch.tensor(target)
-    
+
+# Create custom densenet
