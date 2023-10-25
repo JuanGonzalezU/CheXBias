@@ -41,7 +41,7 @@ try:
     # Batches
     parser.add_argument('--batch_size',
                         type=int,
-                        default=8,
+                        default=90,
                         help = 'Training batch size')
 
     # Number of epohcs
@@ -94,58 +94,17 @@ try:
     else:
         print(bcolors.FAIL + f"Error in argument. Model saving name '{args.save}' should have .pth extension."+ bcolors.ENDC )
         sys.exit()
-
-            
+      
     # Set device
     device = 'cuda:1' if torch.cuda.is_available else 'cpu'
 
     # Load and transform data --------------------------------------------------------------------------------
 
-    # Data loader
-
-    # csv file with labels
-    csv_file = "/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/train_VisualCheXbert.csv"
-    csv_file_val = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/valid.csv'
-
-    # dir to raw data
-    root_dir_train = "/home/juandres/aml/CheXBias/data/interim/train/"
-    root_dir_val = "/home/juandres/aml/CheXBias/data/interim/val/"
-
     # Pre-processing transformations
-    preprocess = transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.Grayscale(num_output_channels=3),  # Convert grayscale to 3 channels
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
+    preprocess = pre_processing()
 
-    # Create index for random sub samples
-
-    # List all files
-    all_files_train = os.listdir(root_dir_train)
-
-    # Get a random subset of files based on the proportion
-
-    # Shuffle all files
-    random.shuffle(all_files_train)
-
-    # Get a random number of files to be used 
-    num_files_to_use = int(len(all_files_train) * args.subsampler)
-
-    # Redefine all files
-    all_files_train = all_files_train[:num_files_to_use]
-
-    # All files val
-    all_files_val = os.listdir(root_dir_val)
-
-    # Create custon dataset
-    custom_dataset_train = CustomImageDataset(csv_file=csv_file, root_dir=root_dir_train, classes=args.classes, transform=preprocess, all_files=all_files_train)
-    custom_dataset_val = CustomImageDataset(csv_file=csv_file_val, root_dir=root_dir_val, classes=args.classes, transform=preprocess, all_files=all_files_val)
-
-    # Create data loader
-    data_loader_train = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
-    data_loader_val = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
+    # Get data loaders
+    data_loader_train, data_loader_val = train_val_dataloaders(args)
 
     # Define model --------------------------------------------------------------------------------
 
@@ -156,7 +115,6 @@ try:
     # Define loss function and optimizer
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
 
     # Training loop
 
@@ -169,7 +127,7 @@ try:
     for epoch in range(epochs):
         
         # Print epochs
-        print(f"Epoch: {epoch}\n---------")
+        print(f"---------------\nEpoch: {epoch}")
         
         # Training step
         train_step(data_loader=data_loader_train, 

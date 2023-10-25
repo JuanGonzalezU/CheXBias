@@ -9,6 +9,9 @@ import torch.nn as nn
 import torchvision.models as models
 from tqdm import tqdm
 import random
+from torchvision import transforms
+import csv
+
 
 # Class for colors
 class bcolors:
@@ -85,7 +88,7 @@ class CustomImageDataset(Dataset):
             img = self.transform(img)
 
         # Get labels
-        return img, torch.tensor(target)
+        return name_dict, img, torch.tensor(target)
 
 # Custom DenseNet         
 class CustomDenseNet(nn.Module):
@@ -107,8 +110,7 @@ class CustomDenseNet(nn.Module):
         return output   
 
     
-# General metrics function
-#     
+# General metrics function   
 def calculate_metrics(target_tensor, predicted_tensor):
   
     # Round the predicted probabilities to obtain binary predictions
@@ -143,6 +145,71 @@ def calculate_metrics(target_tensor, predicted_tensor):
     return torch.tensor(accuracies, dtype=torch.float), torch.tensor(precisions, dtype=torch.float), torch.tensor(recalls, dtype=torch.float), torch.tensor(f1_scores, dtype=torch.float)
 
 
+# Function for creating dataloaders
+def train_val_dataloaders(args):
+
+    # CSV files for gt (won't be used at all)
+    csv_file_train = "/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/train_VisualCheXbert.csv"
+    csv_file_val = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/valid.csv'
+
+    # Root directory of files
+    root_dir_train = "/home/juandres/aml/CheXBias/data/interim/train/"
+    root_dir_val = "/home/juandres/aml/CheXBias/data/interim/val/"
+
+    # Redefine all files
+    all_files_train = os.listdir(root_dir_train)
+
+    # Select subset
+    
+    # Get a random number of files to be used 
+    if args.subsampler == 1:
+        pass 
+    else:
+        
+        # Number of files to be used
+        num_files_to_use = int(len(all_files_train) * args.subsampler)
+
+        # Redefine all files
+        all_files_train = all_files_train[:num_files_to_use]
+
+        # All files val
+        all_files_val = os.listdir(root_dir_val)
+
+    # All validation files
+    all_files_val = os.listdir(root_dir_val)
+
+    # Pre-processing transformations
+    preprocess = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.Grayscale(num_output_channels=3),  # Convert grayscale to 3 channels
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    # Load train and val data
+    custom_dataset_train = CustomImageDataset(csv_file=csv_file_train, root_dir=root_dir_train, classes=args.classes, transform=preprocess, all_files=all_files_train)
+    custom_dataset_val = CustomImageDataset(csv_file=csv_file_val, root_dir=root_dir_val, classes=args.classes, transform=preprocess, all_files=all_files_val)
+
+    # Create data loader
+    data_loader_train = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
+    data_loader_val = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
+
+    return data_loader_train, data_loader_val
+
+# Define pre-processing transformations
+
+def pre_processing():
+
+    return transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.Grayscale(num_output_channels=3),  # Convert grayscale to 3 channels
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+
 # Training step function
 def train_step(model, data_loader, loss_fn, optimizer, device):
 
@@ -153,7 +220,7 @@ def train_step(model, data_loader, loss_fn, optimizer, device):
     train_loss, total_acc, total_pre, total_recall, total_f1 = 0, 0, 0, 0, 0
 
     # Iterate over dataloader
-    for batch, (X, y) in tqdm(enumerate(data_loader), total=len(data_loader), desc='Training'):
+    for _, (_, X, y) in tqdm(enumerate(data_loader), total=len(data_loader), desc='Training'):
        
 
         # Send data to GPU
@@ -209,7 +276,7 @@ def test_step(data_loader, model, device, best_metric, dir_model):
     with torch.inference_mode():
 
         # Iterate in dataloader
-        for X,y in data_loader:
+        for batch, (_,X,y) in tqdm(enumerate(data_loader), total=len(data_loader), desc='Validation'):
 
             # Send data to GPU
             X, y = X.to(device), y.to(device)
@@ -240,3 +307,46 @@ def test_step(data_loader, model, device, best_metric, dir_model):
 
         return total_acc
 
+
+def get_predictions(model, data_loader, classes, device):
+    
+    predictions_dict = {}
+    model.eval()  # Set the model to evaluation mode
+    
+    with torch.no_grad(), tqdm(total=len(data_loader), desc="Processing Batches") as pbar:  # tqdm progress bar
+         for name_dict, inputs, targets in data_loader:
+             inputs, targets = inputs.to(device), targets.to(device)  # Move data to the appropriate device
+             
+             # Forward pass
+             outputs = torch.round(model(inputs))
+ 
+             # Convert outputs to a dictionary with class labels as keys and predictions as values
+             predictions = {}
+ 
+             for i, output in enumerate(outputs):
+                 for j, indv_pred in enumerate(output):     
+                     prediction_value = int(indv_pred.item())  # Get the prediction value from the output tensor
+                     predictions[classes[j]] = prediction_value
+                     
+                 # Add predictions to the dictionary with name_dict as the key
+                 predictions_dict[name_dict[i]] = predictions.copy()  # Make a copy to avoid overwriting in the next iteration
+                 
+             pbar.update(1)  # Update the tqdm progress bar
+             
+    return predictions_dict
+
+def save_predictions(predictions_dict, output_csv_path, classes):
+
+    with open(output_csv_path, 'w', newline='') as csvfile:
+
+        # Create csv writer
+        csvwriter = csv.writer(csvfile)
+
+        # Write the header row with 'Path' in the first column and class labels in subsequent columns
+        csvwriter.writerow(['Path'] + classes)
+
+        # Write the predictions to the CSV file
+        for key, values in tqdm(predictions_dict.items(), desc="Writing to CSV", ncols=100):
+            # Write the dictionary key (name_dict) as the first column
+            row = [key] + [values.get(class_label, 0) for class_label in classes]
+            csvwriter.writerow(row)
