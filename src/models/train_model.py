@@ -6,14 +6,17 @@ from torchvision import transforms
 import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader, SubsetRandomSampler
+import torch.optim.lr_scheduler as sch
 import atexit
 import torch.optim as optim
 
 try: 
 
     # Add general functions
-    sys.path.append('/home/juandres/aml/CheXBias/src/')
+    #sys.path.append('/home/juandres/aml/CheXBias/src/')
+    sys.path.append('/media/disk2/srodriguez47/ProyectoAML/CheXBias/src/')
     from general_functions import *
+    import general_functions as gf
 
 
     # Get and check arguments --------------------------------------------------------------------------------
@@ -33,7 +36,8 @@ try:
     default_classes = ['Enlarged Cardiomediastinum','Cardiomegaly','Lung Opacity','Lung Lesion','Edema','Consolidation','Pneumonia','Atelectasis','Pneumothorax','Pleural Effusion','Pleural Other','Fracture']
 
     # Default model location
-    dir_models = '/home/juandres/aml/CheXBias/models/'
+    #dir_models = '/home/juandres/aml/CheXBias/models/'
+    dir_models = '/media/disk2/srodriguez47/ProyectoAML/CheXBias/models/'
 
     # Add agruments
 
@@ -46,13 +50,13 @@ try:
     # Batches
     parser.add_argument('--batch_size',
                         type=int,
-                        default=90,
+                        default=50,
                         help = 'Training batch size')
 
     # Number of epohcs
     parser.add_argument('--epochs',
                         type=int,
-                        default=3,
+                        default=2,
                         help='Number of epochs for training',
                         )
 
@@ -78,7 +82,7 @@ try:
     # Learning rate
     parser.add_argument('--lr',
                         type=float,
-                        default=0.00001,
+                        default=0.001,
                         help='Models learning rate')
     
     # Sex proportion
@@ -111,7 +115,7 @@ try:
         sys.exit()
 
     # Set device
-    device = 'cuda:1' if torch.cuda.is_available else 'cpu'
+    device = 'cuda:2' if torch.cuda.is_available else 'cpu'
 
     # Load and transform data --------------------------------------------------------------------------------
 
@@ -123,20 +127,20 @@ try:
 
     # Define model --------------------------------------------------------------------------------
 
-    model = CustomDenseNet(num_classes=len(args.classes)).to(device)
-
+    #model = CustomDenseNet(num_classes=len(args.classes)).to(device)
+    model = CustomResNet(num_classes=len(args.classes)).to(device)
     # Train model --------------------------------------------------------------------------------
 
-    # Define loss function and optimizer
+    # Define loss function, optimizer and scheduler
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
+    
     # Training loop
 
     # Number of epochs
     epochs = args.epochs
 
-    # Save previous best matric
+    # Save previous best metric
     best_metric = 0
 
     # Learning rate scheduler
@@ -158,15 +162,16 @@ try:
         )        
 
         # Testing step
-        best_metric = test_step(data_loader=data_loader_val,
+        best_metric = gf.test_step(data_loader=data_loader_val,
             model=model,
             device=device,
             best_metric=best_metric,
-            dir_model=os.path.join(dir_models,args.save)
+            dir_model= os.path.join(dir_models,args.save)
         )
 
-        scheduler.step()  
-    
+        # Step scheduler
+        scheduler.step()
+
 except KeyboardInterrupt:
     print("Cleaning up...")
     torch.cuda.empty_cache()

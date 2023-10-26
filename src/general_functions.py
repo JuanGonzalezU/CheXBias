@@ -109,6 +109,23 @@ class CustomDenseNet(nn.Module):
         output = self.sigmoid(features)
         return output   
 
+# Custom ResNet
+class CustomResNet(nn.Module):
+    def __init__(self, num_classes):
+        super(CustomResNet, self).__init__()
+        self.resnet = models.resnet152(weights=models.ResNet152_Weights.IMAGENET1K_V1)
+        
+        #self.resnet.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
+        # Replace the final fully connected layer with a new one matching the number of classes
+        self.resnet.fc = nn.Linear(self.resnet.fc.in_features, num_classes)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        features = self.resnet(x)
+        output = self.sigmoid(features)
+        return output
+    
     
 # General metrics function   
 def calculate_metrics(target_tensor, predicted_tensor):
@@ -284,7 +301,9 @@ def train_step(model, data_loader, loss_fn, optimizer, device):
         loss.backward()
 
         # 5. Optimizer step
-        optimizer.step()        
+        optimizer.step()  
+
+        
 
 
     # Calcualte average metrics
