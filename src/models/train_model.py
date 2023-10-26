@@ -7,6 +7,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import DataLoader, SubsetRandomSampler
 import atexit
+import torch.optim as optim
 
 try: 
 
@@ -23,6 +24,10 @@ try:
     # Add option of sending classes
     def list_of_strings(arg):
         return arg.split(',')
+    
+    # Function for list of strings
+    def list_of_ints(arg):
+        return list(map(int, arg.split('/')))    
 
     # Default values
     default_classes = ['Enlarged Cardiomediastinum','Cardiomegaly','Lung Opacity','Lung Lesion','Edema','Consolidation','Pneumonia','Atelectasis','Pneumothorax','Pleural Effusion','Pleural Other','Fracture']
@@ -51,7 +56,6 @@ try:
                         help='Number of epochs for training',
                         )
 
-
     # Save model
     parser.add_argument('--save',
                         type=str,
@@ -76,6 +80,12 @@ try:
                         type=float,
                         default=0.00001,
                         help='Models learning rate')
+    
+    # Sex proportion
+    parser.add_argument('--sex_proportion',
+                        type=list_of_ints,
+                        default=[50,50],
+                        help='Proportion of Male/Female in training data (E.g. 40/60)')
 
     # Get all arguments
     args = parser.parse_args()
@@ -94,7 +104,12 @@ try:
     else:
         print(bcolors.FAIL + f"Error in argument. Model saving name '{args.save}' should have .pth extension."+ bcolors.ENDC )
         sys.exit()
-      
+    
+    # Sex proportion
+    if sum(args.sex_proportion) != 100:
+        print(bcolors.FAIL + f"Error in argument. Sex proportion doesn't add up 100."+ bcolors.ENDC )
+        sys.exit()
+
     # Set device
     device = 'cuda:1' if torch.cuda.is_available else 'cpu'
 
@@ -124,18 +139,23 @@ try:
     # Save previous best matric
     best_metric = 0
 
+    # Learning rate scheduler
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
+
     for epoch in range(epochs):
         
         # Print epochs
         print(f"---------------\nEpoch: {epoch}")
         
+        # Step the scheduler              
+
         # Training step
         train_step(data_loader=data_loader_train, 
             model=model, 
             loss_fn=loss_fn,
             optimizer=optimizer,
             device=device        
-        )
+        )        
 
         # Testing step
         best_metric = test_step(data_loader=data_loader_val,
@@ -145,6 +165,8 @@ try:
             dir_model=os.path.join(dir_models,args.save)
         )
 
+        scheduler.step()  
+    
 except KeyboardInterrupt:
     print("Cleaning up...")
     torch.cuda.empty_cache()

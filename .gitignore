@@ -92,3 +92,6 @@ target/
 
 # All models
 *.pth
+
+# Models output
+models/terminal_outputs

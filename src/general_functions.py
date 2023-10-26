@@ -159,24 +159,60 @@ def train_val_dataloaders(args):
     # Redefine all files
     all_files_train = os.listdir(root_dir_train)
 
+    # All validation files
+    all_files_val = os.listdir(root_dir_val)
+
     # Select subset
     
     # Get a random number of files to be used 
     if args.subsampler == 1:
-        pass 
-    else:
-        
+        num_files_to_use = int(len(all_files_train))
+    else:     
         # Number of files to be used
         num_files_to_use = int(len(all_files_train) * args.subsampler)
+    
+    num_files_to_use_val = int(len(all_files_val))
 
-        # Redefine all files
-        all_files_train = all_files_train[:num_files_to_use]
+    # Proportions implementation --------------------------------
+    male_list = []
+    female_list = []
+    
+    male_list_val = []
+    female_list_val = []
+    
+    for file in all_files_train:
+        if 'Male' in file:
+            male_list.append(file)
+        elif 'Female' in file:
+            female_list.append(file)
 
-        # All files val
-        all_files_val = os.listdir(root_dir_val)
+    for file in all_files_val:
+        if 'Male' in file:
+            male_list_val.append(file)
+        elif 'Female' in file:
+            female_list_val.append(file)
 
-    # All validation files
-    all_files_val = os.listdir(root_dir_val)
+
+    # Create new list based on number of files to use and proportions
+    num_files_male = int(num_files_to_use*args.sex_proportion[0]/100)
+    num_files_female = int(num_files_to_use*args.sex_proportion[1]/100)
+
+    num_files_male_val = int(num_files_to_use_val*args.sex_proportion[0]/100)
+    num_files_female_val = int(num_files_to_use_val*args.sex_proportion[1]/100)
+
+    # Shuffle male and female list
+    random.shuffle(male_list)
+    random.shuffle(female_list)
+    
+    random.shuffle(male_list_val)
+    random.shuffle(female_list_val)
+    
+    # Crop list by num_files
+    all_files_train = female_list[:num_files_female] + male_list[:num_files_male]
+    all_files_val = female_list_val[:num_files_female_val] + male_list_val[:num_files_male_val]
+    
+    random.shuffle(all_files_train)
+    random.shuffle(all_files_val)
 
     # Pre-processing transformations
     preprocess = transforms.Compose([
@@ -193,7 +229,7 @@ def train_val_dataloaders(args):
 
     # Create data loader
     data_loader_train = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
-    data_loader_val = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
+    data_loader_val = DataLoader(custom_dataset_val,batch_size=args.batch_size, num_workers=args.num_workers)
 
     return data_loader_train, data_loader_val
 
