@@ -302,7 +302,7 @@ def test_step(data_loader, model, device, best_metric, dir_model):
 
         # Save model
         if (total_acc > best_metric) and (dir_model != 'none'):
-            print("Saving model...")
+            print("Saving model : ",dir_model)
             torch.save(model.state_dict(), dir_model)
 
         return total_acc

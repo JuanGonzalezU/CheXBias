@@ -74,7 +74,7 @@ try:
     # Learning rate
     parser.add_argument('--lr',
                         type=float,
-                        default=0.01,
+                        default=0.00001,
                         help='Models learning rate')
 
     # Get all arguments
