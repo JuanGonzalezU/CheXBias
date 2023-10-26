@@ -144,7 +144,7 @@ try:
     best_metric = 0
 
     # Learning rate scheduler
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
+    #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
 
     for epoch in range(epochs):
         

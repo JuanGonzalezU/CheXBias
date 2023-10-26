@@ -190,46 +190,50 @@ def train_val_dataloaders(args):
     
     num_files_to_use_val = int(len(all_files_val))
 
-    # Proportions implementation --------------------------------
-    male_list = []
-    female_list = []
-    
-    male_list_val = []
-    female_list_val = []
-    
-    for file in all_files_train:
-        if 'Male' in file:
-            male_list.append(file)
-        elif 'Female' in file:
-            female_list.append(file)
+    # Choose if sex proportion is used or not
+    if args.sex_proportion == None:
+        all_files_train = all_files_train[:int(len(all_files_train) * args.subsampler)]
+    else:
+        # Proportions implementation --------------------------------
+        male_list = []
+        female_list = []
+        
+        male_list_val = []
+        female_list_val = []
+        
+        for file in all_files_train:
+            if 'Male' in file:
+                male_list.append(file)
+            elif 'Female' in file:
+                female_list.append(file)
 
-    for file in all_files_val:
-        if 'Male' in file:
-            male_list_val.append(file)
-        elif 'Female' in file:
-            female_list_val.append(file)
+        for file in all_files_val:
+            if 'Male' in file:
+                male_list_val.append(file)
+            elif 'Female' in file:
+                female_list_val.append(file)
 
 
-    # Create new list based on number of files to use and proportions
-    num_files_male = int(num_files_to_use*args.sex_proportion[0]/100)
-    num_files_female = int(num_files_to_use*args.sex_proportion[1]/100)
+        # Create new list based on number of files to use and proportions
+        num_files_male = int(num_files_to_use*args.sex_proportion[0]/100)
+        num_files_female = int(num_files_to_use*args.sex_proportion[1]/100)
 
-    num_files_male_val = int(num_files_to_use_val*args.sex_proportion[0]/100)
-    num_files_female_val = int(num_files_to_use_val*args.sex_proportion[1]/100)
+        num_files_male_val = int(num_files_to_use_val*args.sex_proportion[0]/100)
+        num_files_female_val = int(num_files_to_use_val*args.sex_proportion[1]/100)
 
-    # Shuffle male and female list
-    random.shuffle(male_list)
-    random.shuffle(female_list)
-    
-    random.shuffle(male_list_val)
-    random.shuffle(female_list_val)
-    
-    # Crop list by num_files
-    all_files_train = female_list[:num_files_female] + male_list[:num_files_male]
-    all_files_val = female_list_val[:num_files_female_val] + male_list_val[:num_files_male_val]
-    
-    random.shuffle(all_files_train)
-    random.shuffle(all_files_val)
+        # Shuffle male and female list
+        random.shuffle(male_list)
+        random.shuffle(female_list)
+        
+        random.shuffle(male_list_val)
+        random.shuffle(female_list_val)
+        
+        # Crop list by num_files
+        all_files_train = female_list[:num_files_female] + male_list[:num_files_male]
+        all_files_val = female_list_val[:num_files_female_val] + male_list_val[:num_files_male_val]
+        
+        random.shuffle(all_files_train)
+        random.shuffle(all_files_val)
 
     # Pre-processing transformations
     preprocess = transforms.Compose([
@@ -390,7 +394,7 @@ def get_predictions(model, data_loader, classes, device):
              
     return predictions_dict
 
-def save_predictions(predictions_dict, output_csv_path, classes):
+def save_predictions(predictions_dict, output_csv_path, classes):    
 
     with open(output_csv_path, 'w', newline='') as csvfile:
 

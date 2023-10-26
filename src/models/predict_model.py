@@ -41,7 +41,7 @@ try:
     # Batches
     parser.add_argument('--batch_size',
                         type=int,
-                        default=90,
+                        default=600,
                         help = 'Training batch size')
 
     # Number of workers for the dataloader
@@ -57,6 +57,7 @@ try:
 
     # Get all arguments
     args = parser.parse_args()
+    args.sex_proportion=None
 
     # Sanity check arguments
     if args.model_name == 'None':
@@ -104,7 +105,7 @@ try:
         os.makedirs(model_directory)
 
     # Define csv path
-    csv_path = os.path.join(model_directory,args.model_name.split('/')[1].split('.pth')[0]+'.csv',)    
+    csv_path = os.path.join(model_directory,args.model_name.split('/')[2].split('.pth')[0]+'.csv')    
 
     save_predictions(predictions_dict, csv_path, args.classes)
 
