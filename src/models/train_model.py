@@ -13,8 +13,7 @@ import torch.optim as optim
 try: 
 
     # Add general functions
-    #sys.path.append('/home/juandres/aml/CheXBias/src/')
-    sys.path.append('/media/disk2/srodriguez47/ProyectoAML/CheXBias/src/')
+    sys.path.append('/home/juandres/aml/CheXBias/src/')
     from general_functions import *
     import general_functions as gf
 
@@ -36,8 +35,7 @@ try:
     default_classes = ['Enlarged Cardiomediastinum','Cardiomegaly','Lung Opacity','Lung Lesion','Edema','Consolidation','Pneumonia','Atelectasis','Pneumothorax','Pleural Effusion','Pleural Other','Fracture']
 
     # Default model location
-    #dir_models = '/home/juandres/aml/CheXBias/models/'
-    dir_models = '/media/disk2/srodriguez47/ProyectoAML/CheXBias/models/'
+    dir_models = '/home/juandres/aml/CheXBias/models/'
 
     # Add agruments
 
@@ -115,7 +113,7 @@ try:
         sys.exit()
 
     # Set device
-    device = 'cuda:2' if torch.cuda.is_available else 'cpu'
+    device = 'cuda:1' if torch.cuda.is_available else 'cpu'
 
     # Load and transform data --------------------------------------------------------------------------------
 
@@ -170,7 +168,7 @@ try:
         )
 
         # Step scheduler
-        scheduler.step()
+        #scheduler.step()
 
 except KeyboardInterrupt:
     print("Cleaning up...")

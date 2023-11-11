@@ -11,6 +11,7 @@ from tqdm import tqdm
 import random
 from torchvision import transforms
 import csv
+import torch.nn.functional as F
 
 
 # Class for colors
@@ -220,7 +221,7 @@ def train_val_dataloaders(args):
 
         num_files_male_val = int(num_files_to_use_val*args.sex_proportion[0]/100)
         num_files_female_val = int(num_files_to_use_val*args.sex_proportion[1]/100)
-
+        
         # Shuffle male and female list
         random.shuffle(male_list)
         random.shuffle(female_list)
@@ -239,10 +240,13 @@ def train_val_dataloaders(args):
     preprocess = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
-        transforms.Grayscale(num_output_channels=3),  # Convert grayscale to 3 channels
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
+        transforms.Grayscale(num_output_channels=args.num_output_channels),  # Convert grayscale to specified number of channels
+        transforms.ToTensor()
+        ])
+
+    # If the number of output channels is 3, apply normalization
+    if args.num_output_channels == 3:
+        preprocess.transforms.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
 
     # Load train and val data
     custom_dataset_train = CustomImageDataset(csv_file=csv_file_train, root_dir=root_dir_train, classes=args.classes, transform=preprocess, all_files=all_files_train)
@@ -409,3 +413,72 @@ def save_predictions(predictions_dict, output_csv_path, classes):
             # Write the dictionary key (name_dict) as the first column
             row = [key] + [values.get(class_label, 0) for class_label in classes]
             csvwriter.writerow(row)
+
+
+class AdaptableVAE(nn.Module):
+    def __init__(self, input_channels, latent_size, input_size):
+        super(AdaptableVAE, self).__init__()
+
+        self.input_size = input_size
+
+        # Linear Layer size
+        self.num_elements = round(input_channels*(32*2*2)*(input_size*0.5*0.5*0.5)*(input_size*0.5*0.5*0.5))
+
+        # Encoder
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_channels, 32, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(self.num_elements, 256),  # Corrected size
+            nn.ReLU(),
+            nn.Linear(256, latent_size * 2)  # 2 for mean and variance
+        )
+
+        # Decoder
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_size, 256),
+            nn.ReLU(),
+            nn.Linear(256, 128 * (input_size // 8) * (input_size // 8)),
+            nn.ReLU(),
+            nn.Unflatten(1, (128, input_size // 8, input_size // 8)),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, input_channels, kernel_size=4, stride=2, padding=1),
+            nn.Sigmoid()  # Output values between 0 and 1
+        )
+
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x):
+        
+        # Encode        
+        x = self.encoder(x)
+        mu, log_var = torch.chunk(x, 2, dim=-1)
+
+        # Reparameterize
+        z = self.reparameterize(mu, log_var)
+
+        # Decode
+        x_recon = self.decoder(z)
+
+        return x_recon, mu, log_var
+    
+def loss_function_VAE(recon_x, x, mu, log_var):
+
+    # Reconstruction Loss
+    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+
+    # KL Divergence
+    KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+
+    # Combine both terms
+    return BCE + KLD
