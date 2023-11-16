@@ -87,7 +87,19 @@ try:
     parser.add_argument('--sex_proportion',
                         type=list_of_ints,
                         default=[50,50],
-                        help='Proportion of Male/Female in training data (E.g. 40/60)')    
+                        help='Proportion of Male/Female in training data (E.g. 40/60)') 
+
+    # Age range
+    parser.add_argument('--age_range',
+                        type=int,
+                        default=10,
+                        help='Range in years of the groups')   
+
+    # Age range for training
+    parser.add_argument('--age_group_selection',
+                        type=int,
+                        default=0,
+                        help='Choose what of the groups to use for training')    
 
     # Get all arguments
     args = parser.parse_args()
@@ -124,7 +136,7 @@ try:
     preprocess = pre_processing()
 
     # Get data loaders
-    data_loader_train, data_loader_test = train_test_dataloaders_sex(args)
+    data_loader_train, data_loader_test = train_test_dataloaders_age(args)
 
     # Define model --------------------------------------------------------------------------------
 

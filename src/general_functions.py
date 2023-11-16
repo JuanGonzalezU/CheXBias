@@ -12,7 +12,7 @@ import random
 from torchvision import transforms
 import csv
 import torch.nn.functional as F
-
+import numpy as np
 
 # Class for colors
 class bcolors:
@@ -282,6 +282,84 @@ def train_test_dataloaders_sex(args):
     data_loader_test = DataLoader(custom_dataset_test,batch_size=args.batch_size, num_workers=args.num_workers)
 
     return data_loader_train, data_loader_test
+
+# Function for creating dataloaders based on sex
+def train_test_dataloaders_age(args):
+
+    # CSV files for gt (won't be used at all)
+    csv_file_train = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/train_VisualCheXbert.csv'
+    csv_file_test = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/valid.csv'
+
+    # Root directory of files
+    root_dir_train = '/home/juandres/aml/CheXBias/data/interim/train/'
+    root_dir_test = '/home/juandres/aml/CheXBias/data/interim/val/'
+
+    # Redefine all files
+    all_files_train = os.listdir(root_dir_train)
+
+    # All validation files
+    all_files_test = os.listdir(root_dir_test)
+
+    # Select subset
+    
+    # Get a the number of files to be used 
+    num_files_to_use_train = int(len(all_files_train) * args.subsampler)
+    
+    # Use all files in test
+    num_files_to_use_test = int(len(all_files_test))
+
+    # Set limits
+    min_age = 0
+    max_age = 100
+
+    # Get age from all files
+    list_of_ages_train = torch.asarray([int(file.split('_')[5]) for file in all_files_train])
+    list_of_ages_test = torch.asarray([int(file.split('_')[5]) for file in all_files_test])
+
+    # Count of images per group
+    count_of_groups_train = [sum((list_of_ages_train>=low_lim) & (list_of_ages_train<low_lim+args.age_range)).item() for low_lim in range(min_age,max_age,args.age_range)]
+    count_of_groups_test = [sum((list_of_ages_test>=low_lim) & (list_of_ages_test<low_lim+args.age_range)).item() for low_lim in range(min_age,max_age,args.age_range)]
+
+    # Get standard deviation of data 
+    sd_train = torch.std(list_of_ages_train.float()).item()
+    
+    # Make a new distribution of data
+    all_groups = torch.arange(min_age, max_age, args.age_range)
+
+    # Select mean age
+    mean_age = all_groups[args.age_group_selection].item() + args.age_range/2
+
+    # Create a normal distribution around the age
+    age_dist_vals = torch.asarray(np.random.normal(loc = mean_age,scale = sd_train, size = int(count_of_groups_train[args.age_group_selection]*1.3)).astype(int))
+    count_of_groups_imposed_distribution = [sum((age_dist_vals>=low_lim) & (age_dist_vals<low_lim+args.age_range)).item() for low_lim in range(0,100,10)]
+
+    # Get name of files based on distribution
+    all_files_train_dist = []
+    for i,low_lim in enumerate(range(0,100,10)):
+        
+        # Indices of files for this group
+        indices = np.where((list_of_ages_train >= low_lim) & (list_of_ages_train < low_lim + 10))[0]
+        
+        # Iterate over all indices until list is comlete
+        files_under_group = []
+        for indice in indices:
+            files_under_group.append(all_files_train[indice])
+        random.shuffle(files_under_group)
+
+        # Get number of files for this group
+        num_files_group = count_of_groups_imposed_distribution[i]
+        
+        if len(files_under_group) > num_files_group:
+            files_under_group = files_under_group[:num_files_group] 
+
+        # Save all the files
+        all_files_train_dist += files_under_group       
+
+    xx = torch.asarray([int(file.split('_')[5]) for file in all_files_train_dist])
+    yy = [sum((xx>=low_lim) & (xx<low_lim+args.age_range)).item() for low_lim in range(0,100,10)]
+    breakpoint()
+
+    return 
 
 # Define pre-processing transformations
 
