@@ -163,78 +163,103 @@ def calculate_metrics(target_tensor, predicted_tensor):
     return torch.tensor(accuracies, dtype=torch.float), torch.tensor(precisions, dtype=torch.float), torch.tensor(recalls, dtype=torch.float), torch.tensor(f1_scores, dtype=torch.float)
 
 
-# Function for creating dataloaders
-def train_val_dataloaders(args):
+# Function for creating dataloaders based on sex
+def train_test_dataloaders_sex(args):
 
     # CSV files for gt (won't be used at all)
-    csv_file_train = "/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/train_VisualCheXbert.csv"
-    csv_file_val = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/valid.csv'
+    csv_file_train = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/train_VisualCheXbert.csv'
+    csv_file_test = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/valid.csv'
 
     # Root directory of files
-    root_dir_train = "/home/juandres/aml/CheXBias/data/interim/train/"
-    root_dir_val = "/home/juandres/aml/CheXBias/data/interim/val/"
+    root_dir_train = '/home/juandres/aml/CheXBias/data/interim/train/'
+    root_dir_test = '/home/juandres/aml/CheXBias/data/interim/val/'
 
     # Redefine all files
     all_files_train = os.listdir(root_dir_train)
 
     # All validation files
-    all_files_val = os.listdir(root_dir_val)
+    all_files_test = os.listdir(root_dir_test)
 
     # Select subset
     
-    # Get a random number of files to be used 
-    if args.subsampler == 1:
-        num_files_to_use = int(len(all_files_train))
-    else:     
-        # Number of files to be used
-        num_files_to_use = int(len(all_files_train) * args.subsampler)
+    # Get a the number of files to be used 
+
+    num_files_to_use_train = int(len(all_files_train) * args.subsampler)
     
-    num_files_to_use_val = int(len(all_files_val))
+    # Use all files in test
+    num_files_to_use_test = int(len(all_files_test))
 
     # Choose if sex proportion is used or not
     if args.sex_proportion == None:
-        all_files_train = all_files_train[:int(len(all_files_train) * args.subsampler)]
+        all_files_train = all_files_train[:num_files_to_use_train]
+        all_files_test = all_files_test
     else:
         # Proportions implementation --------------------------------
-        male_list = []
-        female_list = []
+
+        # Use subsampler to choose data
+        random.shuffle(all_files_train)
+        all_files_train = all_files_train[:int(len(all_files_train)*args.subsampler)]
+
+        # Define lists of data
+        male_list_train = []
+        female_list_train = []
         
-        male_list_val = []
-        female_list_val = []
+        male_list_test = []
+        female_list_test = []
         
         for file in all_files_train:
             if 'Male' in file:
-                male_list.append(file)
+                male_list_train.append(file)
             elif 'Female' in file:
-                female_list.append(file)
+                female_list_train.append(file)
 
-        for file in all_files_val:
+        for file in all_files_test:
             if 'Male' in file:
-                male_list_val.append(file)
+                male_list_test.append(file)
             elif 'Female' in file:
-                female_list_val.append(file)
+                female_list_test.append(file)
 
+        # Get proportions of data for train
+        P_train = args.sex_proportion[0]/100 # Female percentage        
+        num_files_female_train = len(female_list_train)
+        num_files_male_train = len(male_list_train)
 
-        # Create new list based on number of files to use and proportions
-        num_files_male = int(num_files_to_use*args.sex_proportion[0]/100)
-        num_files_female = int(num_files_to_use*args.sex_proportion[1]/100)
+        # Print current proportion
+        max_proportion_train = num_files_female_train/(num_files_male_train+num_files_female_train)
+        if P_train >= max_proportion_train:
+            calc_num_files_female_train = num_files_female_train
+            calc_num_files_male_train = int(calc_num_files_female_train*(1-P_train)/P_train)
+        else:
+            calc_num_files_male_train = num_files_male_train
+            calc_num_files_female_train = int(P_train*calc_num_files_male_train/(1-P_train))
 
-        num_files_male_val = int(num_files_to_use_val*args.sex_proportion[0]/100)
-        num_files_female_val = int(num_files_to_use_val*args.sex_proportion[1]/100)
+        # Get proportions of data for test
+        P_test = 0.5 # Female percentage        
+        num_files_female_test = len(female_list_test)
+        num_files_male_test = len(male_list_test)
+
+        # Print current proportion
+        max_proportion_test = num_files_female_test/(num_files_male_test+num_files_female_test)
+        if P_test >= max_proportion_test:
+            calc_num_files_female_test = num_files_female_test
+            calc_num_files_male_test = int(calc_num_files_female_test*(1-P_test)/P_test)
+        else:
+            calc_num_files_male_test = num_files_male_test
+            calc_num_files_female_test = int(P_test*calc_num_files_male_test/(1-P_test))
         
         # Shuffle male and female list
-        random.shuffle(male_list)
-        random.shuffle(female_list)
+        random.shuffle(male_list_train)
+        random.shuffle(female_list_train)
         
-        random.shuffle(male_list_val)
-        random.shuffle(female_list_val)
+        random.shuffle(male_list_test)
+        random.shuffle(female_list_train)
         
         # Crop list by num_files
-        all_files_train = female_list[:num_files_female] + male_list[:num_files_male]
-        all_files_val = female_list_val[:num_files_female_val] + male_list_val[:num_files_male_val]
-        
+        all_files_train = female_list_train[:calc_num_files_female_train] + male_list_train[:calc_num_files_male_train]
+        all_files_test = female_list_test[:calc_num_files_female_test] + male_list_test[:calc_num_files_male_test]                
+
         random.shuffle(all_files_train)
-        random.shuffle(all_files_val)
+        random.shuffle(all_files_test)
 
     # Pre-processing transformations
     preprocess = transforms.Compose([
@@ -250,13 +275,13 @@ def train_val_dataloaders(args):
 
     # Load train and val data
     custom_dataset_train = CustomImageDataset(csv_file=csv_file_train, root_dir=root_dir_train, classes=args.classes, transform=preprocess, all_files=all_files_train)
-    custom_dataset_val = CustomImageDataset(csv_file=csv_file_val, root_dir=root_dir_val, classes=args.classes, transform=preprocess, all_files=all_files_val)
+    custom_dataset_test = CustomImageDataset(csv_file=csv_file_test, root_dir=root_dir_test, classes=args.classes, transform=preprocess, all_files=all_files_test)
 
     # Create data loader
     data_loader_train = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
-    data_loader_val = DataLoader(custom_dataset_val,batch_size=args.batch_size, num_workers=args.num_workers)
+    data_loader_test = DataLoader(custom_dataset_test,batch_size=args.batch_size, num_workers=args.num_workers)
 
-    return data_loader_train, data_loader_val
+    return data_loader_train, data_loader_test
 
 # Define pre-processing transformations
 

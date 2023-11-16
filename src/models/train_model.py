@@ -87,10 +87,13 @@ try:
     parser.add_argument('--sex_proportion',
                         type=list_of_ints,
                         default=[50,50],
-                        help='Proportion of Male/Female in training data (E.g. 40/60)')
+                        help='Proportion of Male/Female in training data (E.g. 40/60)')    
 
     # Get all arguments
     args = parser.parse_args()
+
+    # Add number output channels
+    args.num_output_channels = 3
 
     # Sanitiy check if arguments
 
@@ -121,7 +124,7 @@ try:
     preprocess = pre_processing()
 
     # Get data loaders
-    data_loader_train, data_loader_val = train_val_dataloaders(args)
+    data_loader_train, data_loader_test = train_test_dataloaders_sex(args)
 
     # Define model --------------------------------------------------------------------------------
 
@@ -160,7 +163,7 @@ try:
         )        
 
         # Testing step
-        best_metric = gf.test_step(data_loader=data_loader_val,
+        best_metric = gf.test_step(data_loader=data_loader_test,
             model=model,
             device=device,
             best_metric=best_metric,
