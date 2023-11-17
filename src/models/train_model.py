@@ -34,9 +34,6 @@ try:
     # Default values
     default_classes = ['Enlarged Cardiomediastinum','Cardiomegaly','Lung Opacity','Lung Lesion','Edema','Consolidation','Pneumonia','Atelectasis','Pneumothorax','Pleural Effusion','Pleural Other','Fracture']
 
-    # Default model location
-    dir_models = '/home/juandres/aml/CheXBias/models/'
-
     # Add agruments
 
     # Clases to be clasified
@@ -48,13 +45,13 @@ try:
     # Batches
     parser.add_argument('--batch_size',
                         type=int,
-                        default=50,
+                        default=60,
                         help = 'Training batch size')
 
     # Number of epohcs
     parser.add_argument('--epochs',
                         type=int,
-                        default=2,
+                        default=5,
                         help='Number of epochs for training',
                         )
 
@@ -80,7 +77,7 @@ try:
     # Learning rate
     parser.add_argument('--lr',
                         type=float,
-                        default=0.001,
+                        default=0.00001,
                         help='Models learning rate')
     
     # Sex proportion
@@ -92,15 +89,32 @@ try:
     # Age range
     parser.add_argument('--age_range',
                         type=int,
-                        default=10,
+                        default=20,
                         help='Range in years of the groups')   
 
     # Age range for training
     parser.add_argument('--age_group_selection',
                         type=int,
                         default=0,
-                        help='Choose what of the groups to use for training')    
+                        help='Choose what of the groups to use for training')  
 
+    # Define on what re-grouping to train
+    parser.add_argument('--grouping',
+                        type=str,
+                        default='sex',
+                        help = 'Choose what subgroup to use for training')  
+
+    # Define name of the experiment
+    parser.add_argument('--experiment',
+                        type=str,
+                        default='0',
+                        help='Number of the experiment')
+
+    # Define cuda device to use
+    parser.add_argument('--cuda_device',
+                        type=str,
+                        default='1')                        
+            
     # Get all arguments
     args = parser.parse_args()
 
@@ -126,9 +140,14 @@ try:
     if sum(args.sex_proportion) != 100:
         print(bcolors.FAIL + f"Error in argument. Sex proportion doesn't add up 100."+ bcolors.ENDC )
         sys.exit()
+    
+    # Grouping
+    if (args.grouping != 'sex') and (args.grouping != 'age'):
+        print(bcolors.FAIL + 'Grouping should be age or sex' + bcolors.ENDC) 
+        sys.exit()
 
     # Set device
-    device = 'cuda:1' if torch.cuda.is_available else 'cpu'
+    device = 'cuda:'+args.cuda_device if torch.cuda.is_available else 'cpu'
 
     # Load and transform data --------------------------------------------------------------------------------
 
@@ -136,8 +155,12 @@ try:
     preprocess = pre_processing()
 
     # Get data loaders
-    data_loader_train, data_loader_test = train_test_dataloaders_age(args)
+    if args.grouping == 'sex':
+        data_loader_train, data_loader_test = train_test_dataloaders_sex(args)
+    else:
+        data_loader_train, data_loader_test = train_test_dataloaders_age(args) 
 
+    
     # Define model --------------------------------------------------------------------------------
 
     #model = CustomDenseNet(num_classes=len(args.classes)).to(device)
@@ -159,6 +182,9 @@ try:
     # Learning rate scheduler
     #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.1)
 
+    # Create structure for saving results ---------
+    model_dir = structure_for_results(args)  
+    
     for epoch in range(epochs):
         
         # Print epochs
@@ -171,7 +197,8 @@ try:
             model=model, 
             loss_fn=loss_fn,
             optimizer=optimizer,
-            device=device        
+            device=device,
+            dir_model=model_dir      
         )        
 
         # Testing step
@@ -179,10 +206,10 @@ try:
             model=model,
             device=device,
             best_metric=best_metric,
-            dir_model= os.path.join(dir_models,args.save)
+            dir_model= model_dir
         )
 
-        # Step scheduler
+        # Step scheduler (it didn't worked :()
         #scheduler.step()
 
 except KeyboardInterrupt:

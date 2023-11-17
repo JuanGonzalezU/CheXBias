@@ -51,7 +51,7 @@ class CustomImageDataset(Dataset):
         self.classes = classes
 
         # Define if it is train or val
-        self.type = 'valid' if 'valid' in csv_file else 'train'
+        self.type = 'train'
 
     def __len__(self):
 
@@ -73,9 +73,12 @@ class CustomImageDataset(Dataset):
         dict_row = self.train_dict.get(name_dict)
 
         # Target vector
-        target = []
-        
-        for _,indv_class in enumerate(self.classes):
+        target = []            
+
+        for _,indv_class in enumerate(self.classes):   
+            if dict_row == None:
+                print('FUCK')     
+                break    
             target.append(dict_row[indv_class])
 
         # Define path to image    
@@ -89,7 +92,7 @@ class CustomImageDataset(Dataset):
             img = self.transform(img)
 
         # Get labels
-        return name_dict, img, torch.tensor(target)
+        return file_name, img, torch.tensor(target)
 
 # Custom DenseNet         
 class CustomDenseNet(nn.Module):
@@ -167,12 +170,12 @@ def calculate_metrics(target_tensor, predicted_tensor):
 def train_test_dataloaders_sex(args):
 
     # CSV files for gt (won't be used at all)
-    csv_file_train = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/train_VisualCheXbert.csv'
-    csv_file_test = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/valid.csv'
+    csv_file_train = '/home/juandres/aml/CheXBias/data_new/raw/CheXpert-v1.0/new_train.csv'
+    csv_file_test = '/home/juandres/aml/CheXBias/data_new/raw/CheXpert-v1.0/new_test.csv'
 
     # Root directory of files
-    root_dir_train = '/home/juandres/aml/CheXBias/data/interim/train/'
-    root_dir_test = '/home/juandres/aml/CheXBias/data/interim/val/'
+    root_dir_train = '/home/juandres/aml/CheXBias/data_new/processed/train/'
+    root_dir_test = '/home/juandres/aml/CheXBias/data_new/processed/test/'
 
     # Redefine all files
     all_files_train = os.listdir(root_dir_train)
@@ -198,8 +201,8 @@ def train_test_dataloaders_sex(args):
 
         # Use subsampler to choose data
         random.shuffle(all_files_train)
-        all_files_train = all_files_train[:int(len(all_files_train)*args.subsampler)]
-
+        all_files_train = all_files_train[:int(len(all_files_train)*args.subsampler)]                     
+          
         # Define lists of data
         male_list_train = []
         female_list_train = []
@@ -220,7 +223,7 @@ def train_test_dataloaders_sex(args):
                 female_list_test.append(file)
 
         # Get proportions of data for train
-        P_train = args.sex_proportion[0]/100 # Female percentage        
+        P_train = args.sex_proportion[1]/100 # Female percentage        
         num_files_female_train = len(female_list_train)
         num_files_male_train = len(male_list_train)
 
@@ -273,7 +276,7 @@ def train_test_dataloaders_sex(args):
     if args.num_output_channels == 3:
         preprocess.transforms.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
 
-    # Load train and val data
+    # Load train and test data
     custom_dataset_train = CustomImageDataset(csv_file=csv_file_train, root_dir=root_dir_train, classes=args.classes, transform=preprocess, all_files=all_files_train)
     custom_dataset_test = CustomImageDataset(csv_file=csv_file_test, root_dir=root_dir_test, classes=args.classes, transform=preprocess, all_files=all_files_test)
 
@@ -287,12 +290,12 @@ def train_test_dataloaders_sex(args):
 def train_test_dataloaders_age(args):
 
     # CSV files for gt (won't be used at all)
-    csv_file_train = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/train_VisualCheXbert.csv'
-    csv_file_test = '/home/juandres/aml/CheXBias/data/raw/CheXpert-v1.0/valid.csv'
+    csv_file_train = '/home/juandres/aml/CheXBias/data_new/raw/CheXpert-v1.0/new_train.csv'
+    csv_file_test = '/home/juandres/aml/CheXBias/data_new/raw/CheXpert-v1.0/new_test.csv'
 
     # Root directory of files
-    root_dir_train = '/home/juandres/aml/CheXBias/data/interim/train/'
-    root_dir_test = '/home/juandres/aml/CheXBias/data/interim/val/'
+    root_dir_train = '/home/juandres/aml/CheXBias/data_new/processed/train/'
+    root_dir_test = '/home/juandres/aml/CheXBias/data_new/processed/test/'
 
     # Redefine all files
     all_files_train = os.listdir(root_dir_train)
@@ -307,6 +310,10 @@ def train_test_dataloaders_age(args):
     
     # Use all files in test
     num_files_to_use_test = int(len(all_files_test))
+
+    # Create subsample of data based on subsampler
+    random.shuffle(all_files_train)
+    all_files_train = all_files_train[:num_files_to_use_train]
 
     # Set limits
     min_age = 0
@@ -331,9 +338,9 @@ def train_test_dataloaders_age(args):
 
     # Create a normal distribution around the age
     age_dist_vals = torch.asarray(np.random.normal(loc = mean_age,scale = sd_train, size = int(count_of_groups_train[args.age_group_selection]*1.3)).astype(int))
-    count_of_groups_imposed_distribution = [sum((age_dist_vals>=low_lim) & (age_dist_vals<low_lim+args.age_range)).item() for low_lim in range(0,100,10)]
+    count_of_groups_imposed_distribution_train = [sum((age_dist_vals>=low_lim) & (age_dist_vals<low_lim+args.age_range)) for low_lim in range(0,100,10)]
 
-    # Get name of files based on distribution
+    # Get name of files based on distribution for training
     all_files_train_dist = []
     for i,low_lim in enumerate(range(0,100,10)):
         
@@ -347,19 +354,72 @@ def train_test_dataloaders_age(args):
         random.shuffle(files_under_group)
 
         # Get number of files for this group
-        num_files_group = count_of_groups_imposed_distribution[i]
+        num_files_group = count_of_groups_imposed_distribution_train[i]
         
         if len(files_under_group) > num_files_group:
             files_under_group = files_under_group[:num_files_group] 
 
         # Save all the files
-        all_files_train_dist += files_under_group       
+        all_files_train_dist += files_under_group      
 
-    xx = torch.asarray([int(file.split('_')[5]) for file in all_files_train_dist])
-    yy = [sum((xx>=low_lim) & (xx<low_lim+args.age_range)).item() for low_lim in range(0,100,10)]
-    breakpoint()
+    # Check results of re-sampling
+    age_of_selectd_files_trian = torch.asarray([int(file.split('_')[5]) for file in all_files_train_dist])
+    images_per_group_train = [sum((age_of_selectd_files_trian>=low_lim) & (age_of_selectd_files_trian<low_lim+args.age_range)) for low_lim in range(0,100,10)]
+    
+    # For testing, the amount of files per class should be the same
+    count_of_groups_imposed_distribution_test = np.repeat(min(count_of_groups_test),len(count_of_groups_test))
+    
+    # Get name of files based on distribution for training
+    all_files_test_dist = []
+    for i,low_lim in enumerate(range(min_age,max_age,args.age_range)):
+    
+       # Indices of files for this group
+        indices = np.where((list_of_ages_test >= low_lim) & (list_of_ages_test < low_lim + args.age_range))[0]
+        
+        # Iterate over all indices until list is comlete
+        files_under_group = []
+        for indice in indices:
+            files_under_group.append(all_files_test[indice])
+        random.shuffle(files_under_group)
 
-    return 
+        # Get number of files for this group
+        num_files_group = count_of_groups_imposed_distribution_test[i]
+        
+        # Get files under this group
+        files_under_group = files_under_group[:num_files_group] 
+
+        # Save all the files
+        all_files_test_dist += files_under_group   
+
+       
+    # Check results of re-sampling
+    age_of_selectd_files_test = torch.asarray([int(file.split('_')[5]) for file in all_files_test_dist])
+    images_per_group_test = [sum((age_of_selectd_files_test>=low_lim) & (age_of_selectd_files_test<low_lim+args.age_range)) for low_lim in range(min_age,max_age,args.age_range)]
+
+    print(f'Images per group in train : {images_per_group_train}')
+    print(f'Images per group in test : {images_per_group_test}')
+
+    # Pre-processing transformations
+    preprocess = transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.Grayscale(num_output_channels=args.num_output_channels),  # Convert grayscale to specified number of channels
+        transforms.ToTensor()
+        ])
+
+    # If the number of output channels is 3, apply normalization
+    if args.num_output_channels == 3:
+        preprocess.transforms.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
+
+    # Load train and test data
+    custom_dataset_train = CustomImageDataset(csv_file=csv_file_train, root_dir=root_dir_train, classes=args.classes, transform=preprocess, all_files=all_files_train_dist)
+    custom_dataset_test = CustomImageDataset(csv_file=csv_file_test, root_dir=root_dir_test, classes=args.classes, transform=preprocess, all_files=all_files_test_dist)
+
+    # Create data loader
+    data_loader_train = DataLoader(custom_dataset_train,batch_size=args.batch_size, num_workers=args.num_workers)
+    data_loader_test = DataLoader(custom_dataset_test,batch_size=args.batch_size, num_workers=args.num_workers)
+
+    return data_loader_train, data_loader_test
 
 # Define pre-processing transformations
 
@@ -375,7 +435,7 @@ def pre_processing():
 
 
 # Training step function
-def train_step(model, data_loader, loss_fn, optimizer, device):
+def train_step(model, data_loader, loss_fn, optimizer, device, dir_model):
 
     # Move model to device
     model.to(device)
@@ -414,9 +474,6 @@ def train_step(model, data_loader, loss_fn, optimizer, device):
         # 5. Optimizer step
         optimizer.step()  
 
-        
-
-
     # Calcualte average metrics
     train_loss /= len(data_loader)
     total_acc /= len(data_loader)
@@ -427,6 +484,28 @@ def train_step(model, data_loader, loss_fn, optimizer, device):
     # Print results
     print(f"Train loss: {train_loss:.5f} | Train Acc: {total_acc:.5f}  | Train Precision: {total_pre:.5f} ")
 
+    # Save results of this step into a csv file
+    
+    # Path to loss.csv
+    path_training_results_train_data = os.path.join(dir_model,'results_train_data.csv')
+
+    # Check if the file exists or not, if not, create it
+    if not os.path.isfile(path_training_results_train_data):
+        # Create empty csv file with header 
+        with open(path_training_results_train_data,'w',newline = '') as file:
+            # Create writer
+            writer = csv.writer(file)
+            # Write header
+            writer.writerow(['mean_accuracy','mean_precision','mean_recall','mean_f1','loss'])
+
+    # If file exists, add metrics
+    with open(path_training_results_train_data,'a',newline = '') as file:
+        # Create writer
+        writer = csv.writer(file)    
+        # Write row
+        writer.writerow([total_acc,total_pre,total_recall,total_f1,train_loss.item()])
+
+
 # Testing step function
 def test_step(data_loader, model, device, best_metric, dir_model):
     
@@ -436,13 +515,13 @@ def test_step(data_loader, model, device, best_metric, dir_model):
     # Change model to eval mode
     model.eval()
 
-    total_acc, total_pre, total_recall, total_f1 = 0, 0, 0, 0
+    total_acc, total_pre, total_recall, total_f1 = 0, 0, 0, 0    
 
     # Turn on inference context manager
     with torch.inference_mode():
 
         # Iterate in dataloader
-        for batch, (_,X,y) in tqdm(enumerate(data_loader), total=len(data_loader), desc='Validation'):
+        for batch, (file_name,X,y) in tqdm(enumerate(data_loader), total=len(data_loader), desc='Test'):
 
             # Send data to GPU
             X, y = X.to(device), y.to(device)
@@ -450,7 +529,7 @@ def test_step(data_loader, model, device, best_metric, dir_model):
             # Forward pass            
             y_pred = model(X)
 
-            # Calcualte metrics
+            # Calcualte metrics            
             accuracy, precision, recall, f1 = calculate_metrics(y, y_pred)
 
             total_acc += torch.mean(accuracy).item()
@@ -464,15 +543,37 @@ def test_step(data_loader, model, device, best_metric, dir_model):
         total_recall /= len(data_loader)
         total_f1 /= len(data_loader)
 
-        print(f"Val Acc: {total_acc:.5f}  | Val Precision: {total_pre:.5f} ")
+        print(f"Test Acc: {total_acc:.5f}  | Test Precision: {total_pre:.5f} ")        
+
+        # Save results of this step into a csv file
+        
+        # Path to training_results.csv
+        path_training_results_test_data = os.path.join(dir_model,'results_test_data.csv')
+        
+        # Check if the file exists or not, if not, create it
+        if not os.path.isfile(path_training_results_test_data):
+            # Create empty csv file with header 
+            with open(path_training_results_test_data,'w',newline = '') as file:
+                # Create writer
+                writer = csv.writer(file)
+                # Write header
+                writer.writerow(['mean_accuracy','mean_precision','mean_recall','mean_f1'])
+
+        # If file exists, add metrics
+        with open(path_training_results_test_data,'a',newline = '') as file:
+            # Create writer
+            writer = csv.writer(file)    
+            # Write row
+            writer.writerow([total_acc,total_pre,total_recall,total_f1])
 
         # Save model
         if (total_acc > best_metric) and (dir_model != 'none'):
             print("Saving model : ",dir_model)
-            torch.save(model.state_dict(), dir_model)
+            torch.save(model.state_dict(), os.path.join(dir_model,'best_model.pth'))            
 
-        return total_acc
-
+            return total_acc
+        
+        return best_metric
 
 def get_predictions(model, data_loader, classes, device):
     
@@ -585,3 +686,30 @@ def loss_function_VAE(recon_x, x, mu, log_var):
 
     # Combine both terms
     return BCE + KLD
+
+def structure_for_results(args):
+    
+    path_to_results = '/home/juandres/aml/CheXBias/models'
+
+    # Create 1st level - Experiment
+    experiment_path = os.path.join(path_to_results,'Experiment_'+args.experiment)
+    if not os.path.exists(experiment_path):
+
+        # Path for experiment
+        os.mkdir(experiment_path)
+
+        # Paths for age and sex
+        os.mkdir(os.path.join(experiment_path,'sex'))
+        os.mkdir(os.path.join(experiment_path,'age'))
+
+    # Get name of the model
+    name = args.save
+    name = name.split('.')[0]
+
+    # Create directory for this model
+    model_dir = os.path.join(path_to_results,'Experiment_'+args.experiment,args.grouping,name) 
+    os.mkdir(model_dir)
+
+    return model_dir    
+    
+    
