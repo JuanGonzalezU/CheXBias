@@ -98,3 +98,6 @@ target/
 models/
 !/src/models/
 
+# Reports
+reports/
+
