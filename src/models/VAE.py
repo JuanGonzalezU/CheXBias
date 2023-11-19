@@ -6,8 +6,11 @@ import argparse
 import sys
 
 # Add general functions
-sys.path.append('/home/juandres/aml/CheXBias/src/')
+#sys.path.append('/home/juandres/aml/CheXBias/src/')
+sys.path.append('/media/disk2/srodriguez47/ProyectoAML/CheXBias/src/')
 from general_functions import *
+from general_functions import loss_function_VAEv2
+from general_functions import AdaptableVAE2
 
 # Get arguments
 parser = argparse.ArgumentParser()
@@ -24,8 +27,8 @@ def list_of_ints(arg):
 default_classes = ['Enlarged Cardiomediastinum','Cardiomegaly','Lung Opacity','Lung Lesion','Edema','Consolidation','Pneumonia','Atelectasis','Pneumothorax','Pleural Effusion','Pleural Other','Fracture']
 
 # Default model location
-dir_models = '/home/juandres/aml/CheXBias/models/'
-
+#dir_models = '/home/juandres/aml/CheXBias/models/'
+dir_models = '/media/disk2/srodriguez47/ProyectoAML/CheXBias/models'
 # Add agruments
 
 # Clases to be clasified
@@ -37,7 +40,7 @@ parser.add_argument('--classes',
 # Batches
 parser.add_argument('--batch_size',
                     type=int,
-                    default=50,
+                    default=32,
                     help = 'Training batch size')
 
 # Number of epohcs
@@ -55,7 +58,7 @@ parser.add_argument('--save',
 # Sub sampler
 parser.add_argument('--subsampler',
                     type=float,
-                    default=1,
+                    default=0.1,
                     help = 'Percentage of data to be used')
 
 
@@ -86,19 +89,19 @@ args.num_output_channels = 1
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Instantiate the VAE
-vae = AdaptableVAE(input_channels=1, latent_size=64, input_size=224).to(device)
+vae = AdaptableVAE2(input_channels=1, latent_size=64, input_size=224).to(device)
 
 # Define the optimizer
 optimizer = optim.Adam(vae.parameters(), lr=0.001)
 
 # Load data
-data_loader_train, data_loader_val = train_val_dataloaders(args)
+data_loader_train, data_loader_val = train_test_dataloaders_sex(args)
 
 # Log interval
 log_interval = 1  # Adjust this based on your preference
 
 # Training loop
-num_epochs = 1
+num_epochs = 10
 for epoch in range(num_epochs):
     vae.train()
     for batch_idx, (_,data,_) in enumerate(data_loader_train):
@@ -111,7 +114,7 @@ for epoch in range(num_epochs):
         recon_batch, mu, log_var = vae(data)
         
         # Compute the loss
-        loss = loss_function_VAE(recon_batch, data, mu, log_var)
+        loss = loss_function_VAEv2(recon_batch, data, mu, log_var)
         
         # Backward pass and optimization
         loss.backward()
@@ -122,4 +125,4 @@ for epoch in range(num_epochs):
         print(f'Train Epoch: {epoch+1}/{num_epochs} [{batch_idx * len(data)}/{len(data_loader_train.dataset)}] Loss: {loss.item()/len(data)}')
 
 # Optionally, you can save the trained model
-torch.save(vae.state_dict(), '/home/juandres/aml/CheXBias/models/VAE/test.pth')
+torch.save(vae.state_dict(), '/media/disk2/srodriguez47/ProyectoAML/CheXBias/models/test.pth')

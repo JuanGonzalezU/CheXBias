@@ -676,9 +676,95 @@ class AdaptableVAE(nn.Module):
 
         return x_recon, mu, log_var
     
+
+class AdaptableVAE2(nn.Module):
+    def __init__(self, input_channels=1, latent_size=64, input_size=224):
+        super(AdaptableVAE2, self).__init__()
+
+        self.input_size = input_size
+        
+        # Linear Layer size
+        self.num_elements = round(input_channels*(32*6)*(input_size*0.5**3)*(input_size*0.5**3))
+        
+        
+        n_filters = 32
+    
+        #print(self.num_elements)
+        #print(self.input_size)
+        
+        # Encoder layers
+        self.encoder = nn.Sequential(
+            nn.Conv2d(input_channels, 1 * n_filters, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(1 * n_filters),
+            nn.ReLU(),
+            nn.Conv2d(1 * n_filters, 2 * n_filters, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(2 * n_filters),
+            nn.ReLU(),
+            nn.Conv2d(2 * n_filters, 4 * n_filters, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(4 * n_filters),
+            nn.ReLU(),
+            nn.Conv2d(4 * n_filters, 6 * n_filters, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(6 * n_filters),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(self.num_elements, 256),  # Corrected size
+            nn.ReLU(),
+            nn.Linear(256, latent_size * 2)
+        )
+        self.fc_y_logit = nn.Linear(self.num_elements, 1)
+        self.fc_hidden = nn.Linear(self.num_elements, latent_size)
+        self.fc_mu = nn.Linear(self.num_elements, latent_size)
+        self.fc_log_var = nn.Linear(self.num_elements, latent_size)
+
+         # Decoder layers
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_size, 256),
+            nn.ReLU(),
+            nn.Linear(256, 192 * (input_size // 8) * (input_size // 8)),
+            nn.ReLU(),
+            nn.Unflatten(1, (192, input_size // 8,input_size // 8)),
+            nn.ConvTranspose2d(6 * n_filters, 4 * n_filters, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(4 * n_filters),
+            nn.ReLU(),
+            nn.ConvTranspose2d(4 * n_filters, 2 * n_filters, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(2 * n_filters),
+            nn.ReLU(),
+            nn.ConvTranspose2d(2 * n_filters, 1 * n_filters, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(1 * n_filters),
+            nn.ReLU(),
+            nn.ConvTranspose2d(1 * n_filters, input_channels, kernel_size=4, stride=2, padding=1),
+            nn.Sigmoid(), 
+        )
+
+    def reparameterization_trick(self, mu, log_var):
+        batch_size, latent_size = mu.size()
+        epsilon = torch.randn(batch_size, latent_size).to(mu.device)
+        z = mu + torch.exp(0.5 * log_var) * epsilon
+        return z
+
+    def forward(self, x):
+        # Encoder
+        x = self.encoder(x)
+        #print(x.shape)  
+        #x = x.view(-1, self.num_elements)
+        #mu = self.fc_mu(x)
+        #log_var = self.fc_log_var(x)
+        mu, log_var = torch.chunk(x, 2, dim=-1)
+        
+
+        # Reparameterization trick
+        z = self.reparameterization_trick(mu, log_var)
+
+        # Decoder
+        x_recon = self.decoder(z)
+        #print(x_recon.shape)
+        return x_recon, mu, log_var
+    
+
 def loss_function_VAE(recon_x, x, mu, log_var):
 
     # Reconstruction Loss
+      
     BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
 
     # KL Divergence
@@ -686,6 +772,17 @@ def loss_function_VAE(recon_x, x, mu, log_var):
 
     # Combine both terms
     return BCE + KLD
+
+def loss_function_VAEv2(recon_x, x, mu, log_var, kl_weight=0.0005):
+
+    latent_loss = torch.mean(0.5 * torch.sum(torch.exp(log_var) + mu**2 - 1 - log_var, dim=1))
+    
+    # Reconstruction loss
+    reconstruction_loss = F.mse_loss(recon_x, x)
+    
+    # Total VAE loss
+    total_vae_loss = kl_weight * latent_loss + reconstruction_loss
+    return total_vae_loss
 
 def structure_for_results(args):
     
