@@ -782,7 +782,56 @@ def loss_function_VAEv2(recon_x, x, mu, log_var, kl_weight=0.0005):
     
     # Total VAE loss
     total_vae_loss = kl_weight * latent_loss + reconstruction_loss
+
     return total_vae_loss
+
+def debiasing_loss_function(x, recon_x, y, y_logit, mu, log_var):
+
+    vae_loss = loss_function_VAEv2(x, recon_x, mu, log_var)
+    classification_loss = F.binary_cross_entropy_with_logits(y_logit, y.unsqueeze(1))
+    class_masks = [(y == class_index).float() for class_index in range(12)]
+    
+    # DB-VAE total loss
+    total_loss = classification_loss + sum([mask * vae_loss for mask in class_masks])
+
+    return total_loss, classification_loss
+
+
+#have to change encoder and decoder to two separate classes for this to work i think
+def get_latent_mu(images, encoder, device, batch_size=32):
+    N = images.shape[0]
+    mu = torch.zeros((N, latent_dim)).to(device)
+    for start_ind in range(0, N, batch_size):
+        end_ind = min(start_ind+batch_size, N+1)
+        batch = images[start_ind:end_ind].to(device)
+        batch_mu, _ = encoder(batch)
+        mu[start_ind:end_ind] = batch_mu.detach()
+    return mu
+
+def get_training_sample_probabilities(images, encoder, device, bins=10, smoothing_fac=0.0): 
+    print("Recomputing the sampling probabilities")
+    
+    mu = get_latent_mu(images, encoder, device).cpu().numpy()
+    training_sample_p = np.zeros(mu.shape[0])
+    
+    for i in range(latent_dim):
+        latent_distribution = mu[:,i]
+        hist_density, bin_edges = np.histogram(latent_distribution, density=True, bins=bins)
+
+        bin_edges[0] = -float('inf')
+        bin_edges[-1] = float('inf')
+        bin_idx = np.digitize(latent_distribution, bin_edges)
+
+        hist_smoothed_density = hist_density + smoothing_fac
+        hist_smoothed_density = hist_smoothed_density / np.sum(hist_smoothed_density)
+
+        p = 1.0/(hist_smoothed_density[bin_idx-1])
+        p = p / np.sum(p)
+        training_sample_p = np.maximum(p, training_sample_p)
+        
+    training_sample_p /= np.sum(training_sample_p)
+
+    return training_sample_p
 
 def structure_for_results(args):
     
