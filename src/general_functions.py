@@ -620,77 +620,21 @@ def save_predictions(predictions_dict, output_csv_path, classes):
 
 
 class AdaptableVAE(nn.Module):
-    def __init__(self, input_channels, latent_size, input_size):
+    def __init__(self, input_channels=1, latent_size=64, input_size=224,num_classes=12):
         super(AdaptableVAE, self).__init__()
 
+        # Set the input size
         self.input_size = input_size
 
-        # Linear Layer size
-        self.num_elements = round(input_channels*(32*2*2)*(input_size*0.5*0.5*0.5)*(input_size*0.5*0.5*0.5))
-
-        # Encoder
-        self.encoder = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.Flatten(),
-            nn.Linear(self.num_elements, 256),  # Corrected size
-            nn.ReLU(),
-            nn.Linear(256, latent_size * 2)  # 2 for mean and variance
-        )
-
-        # Decoder
-        self.decoder = nn.Sequential(
-            nn.Linear(latent_size, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128 * (input_size // 8) * (input_size // 8)),
-            nn.ReLU(),
-            nn.Unflatten(1, (128, input_size // 8, input_size // 8)),
-            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.ConvTranspose2d(32, input_channels, kernel_size=4, stride=2, padding=1),
-            nn.Sigmoid()  # Output values between 0 and 1
-        )
-
-    def reparameterize(self, mu, log_var):
-        std = torch.exp(0.5 * log_var)
-        eps = torch.randn_like(std)
-        return mu + eps * std
-
-    def forward(self, x):
+        # Save number of classes and latent size
+        self.num_classes = num_classes
+        self.latent_size = latent_size
         
-        # Encode        
-        x = self.encoder(x)
-        mu, log_var = torch.chunk(x, 2, dim=-1)
-
-        # Reparameterize
-        z = self.reparameterize(mu, log_var)
-
-        # Decode
-        x_recon = self.decoder(z)
-
-        return x_recon, mu, log_var
-    
-
-class AdaptableVAE2(nn.Module):
-    def __init__(self, input_channels=1, latent_size=64, input_size=224):
-        super(AdaptableVAE2, self).__init__()
-
-        self.input_size = input_size
-        
-        # Linear Layer size
-        self.num_elements = round(input_channels*(32*6)*(input_size*0.5**3)*(input_size*0.5**3))
-        
-        
+        # Set number of filters
         n_filters = 32
-    
-        #print(self.num_elements)
-        #print(self.input_size)
+        
+        # Linear Layer size       
+        self.num_elements = 6 * n_filters * (input_size // 8) * (input_size // 8)        
         
         # Encoder layers
         self.encoder = nn.Sequential(
@@ -709,14 +653,13 @@ class AdaptableVAE2(nn.Module):
             nn.Flatten(),
             nn.Linear(self.num_elements, 256),  # Corrected size
             nn.ReLU(),
-            nn.Linear(256, latent_size * 2)
+            nn.Linear(256, latent_size*2 + num_classes)
         )
-        self.fc_y_logit = nn.Linear(self.num_elements, 1)
-        self.fc_hidden = nn.Linear(self.num_elements, latent_size)
-        self.fc_mu = nn.Linear(self.num_elements, latent_size)
-        self.fc_log_var = nn.Linear(self.num_elements, latent_size)
 
-         # Decoder layers
+        # Sigmoid layer
+
+
+        # Decoder layers
         self.decoder = nn.Sequential(
             nn.Linear(latent_size, 256),
             nn.ReLU(),
@@ -743,51 +686,49 @@ class AdaptableVAE2(nn.Module):
         return z
 
     def forward(self, x):
+
         # Encoder
         x = self.encoder(x)
-        #print(x.shape)  
-        #x = x.view(-1, self.num_elements)
-        #mu = self.fc_mu(x)
-        #log_var = self.fc_log_var(x)
-        mu, log_var = torch.chunk(x, 2, dim=-1)
         
+        # Get the mu, logvar and the prediction of each class
+        split_sizes = [self.latent_size, self.latent_size, self.num_classes]
+        mu, log_var,y_pred = torch.split(x, split_sizes, dim=1)
+
+        # Pass prediction through a sigmoid layer for classification
+        y_pred = nn.Sigmoid()(y_pred)
 
         # Reparameterization trick
         z = self.reparameterization_trick(mu, log_var)
 
         # Decoder
         x_recon = self.decoder(z)
-        #print(x_recon.shape)
-        return x_recon, mu, log_var
+        
+        return x_recon, mu, log_var, y_pred
     
 
-def loss_function_VAE(recon_x, x, mu, log_var):
+def loss_function_VAE(recon_x, x, y, y_pred, mu, log_var):
 
-    # Reconstruction Loss
-      
-    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+    # Reconstruction loss using Mean Squared Error
+    recon_loss = F.mse_loss(recon_x, x, reduction='sum')
 
-    # KL Divergence
-    KLD = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
+    # KL divergence loss
+    kl_loss = -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp())
 
-    # Combine both terms
-    return BCE + KLD
-
-def loss_function_VAEv2(recon_x, x, mu, log_var, kl_weight=0.0005):
-
-    latent_loss = torch.mean(0.5 * torch.sum(torch.exp(log_var) + mu**2 - 1 - log_var, dim=1))
+    # Classification Loss    
+    classification_loss = nn.CrossEntropyLoss()(y_pred,y)
     
-    # Reconstruction loss
-    reconstruction_loss = F.mse_loss(recon_x, x)
-    
-    # Total VAE loss
-    total_vae_loss = kl_weight * latent_loss + reconstruction_loss
+    # Combine the reconstruction and KL divergence losses
 
-    return total_vae_loss
+    # Define coeficients
+    c1,c2,c3 = 1,1,0
+    total_loss = c1*recon_loss + c2*kl_loss + c3*classification_loss  
+    
+    #print(f'RL : {round(c1*recon_loss.item(),3)} - KL :  {round(c2*kl_loss.item(),3)} - CLSF :  {round(c3*classification_loss.item(),3)} - Total Loss _ {round(total_loss.item(),3)}')
+    return total_loss
 
 def debiasing_loss_function(x, recon_x, y, y_logit, mu, log_var):
 
-    vae_loss = loss_function_VAEv2(x, recon_x, mu, log_var)
+    vae_loss = loss_function_VAE(x, recon_x, mu, log_var)
     classification_loss = F.binary_cross_entropy_with_logits(y_logit, y.unsqueeze(1))
     class_masks = [(y == class_index).float() for class_index in range(12)]
     
