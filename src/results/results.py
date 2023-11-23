@@ -39,7 +39,7 @@ try:
     # Sub sampler
     parser.add_argument('--subsampler',
                         type=float,
-                        default=1,
+                        default=0.001,
                         help = 'Percentage of data to be used')
 
 
@@ -117,13 +117,14 @@ try:
         groups = os.listdir(os.path.join(path_results,experiment))
 
         # Iterate over each group
-        for group in ['sex']:#groups:
+        for group in ['age']:#groups:
 
             # Path of model's folder
             path_model = os.path.join(path_results,experiment,group)
 
             # List on all the models in the group
             models = os.listdir(os.path.join(path_model))
+            models.sort()
 
             # Iterate over each model and create predictions
             for name_model in models:
@@ -225,23 +226,20 @@ try:
                                                 writer.writerow(all_metrics_female[i].tolist())                            
 
                     elif group == 'age':                    
-                        # Create directory for saving results
+                        # Create directory for saving results                        
                         dir_to_model_report = os.path.join(path_report,experiment,group,name_model)
                         if not os.path.isdir(dir_to_model_report):
                             os.mkdir(dir_to_model_report)                        
-                            for indv_age_group in ['group_selection_0','group_selection_1','group_selection_2','group_selection_3','group_selection_4']:
-                                    dir_to_model_by_age_group_report = os.path.join(dir_to_model_report,indv_age_group) 
-                                    os.mkdir(dir_to_model_by_age_group_report)
-                                    # Create empty csv with headers
-                                    metric_names = ['accuracy','precision','recall','f1']
-                                    for metric_name in metric_names:
-                                        # Name for csv file
-                                        path_csv = os.path.join(dir_to_model_by_age_group_report,metric_name+'.csv')
-                                        with open(path_csv,'w',newline = '') as file:
-                                            # Create writer
-                                            writer = csv.writer(file)
-                                            # Write header
-                                            writer.writerow(args.classes)
+                            # Create empty csv with headers
+                            metric_names = ['predictions','ground_truth']
+                            for metric_name in metric_names:
+                                # Name for csv file
+                                path_csv = os.path.join(dir_to_model_report,metric_name+'.csv')
+                                with open(path_csv,'w',newline = '') as file:
+                                    # Create writer
+                                    writer = csv.writer(file)
+                                    # Write header
+                                    writer.writerow(['name'] + args.classes)
 
                         # Iterate in dataloader
                         for batch,(file_names,X,y) in tqdm(enumerate(data_loader_test)):
@@ -255,44 +253,22 @@ try:
                             # Create predictions
                             y_pred = model(X)
 
-                            # Separate prediction based on age group
-                            min_age = 0
-                            max_age = 100
-                            age_range = args.age_range
+                            # Move to CPU
+                            y_pred = torch.round(y_pred).detach().cpu().numpy()
+                            y = torch.round(y).detach().cpu().numpy()
+
+                            # Save predictions                            
+                            with open(os.path.join(dir_to_model_report,'predictions.csv'),'a',newline = '') as file:
+                                writer = csv.writer(file)                                
+                                for name_count, row in enumerate(y_pred):                                    
+                                    # Data to write                                                    
+                                    writer.writerow([file_names[name_count]] + row.astype(int).tolist())
                             
-                            # Create ranges of age
-                            ranges = [[start, start + age_range] for start in range(min_age, max_age, age_range)]
-                            
-                            # Create encoding for age groupa
-                            age_encoding = []
-                            for age in ages:
-                                for i,indv_range in enumerate(ranges):
-                                    if (age >= indv_range[0]) and (age < indv_range[1]):
-                                        age_encoding.append(i)
-                            
-                            # Iterate over each age range, get metrics and save them 
-                            for j,indv_range in enumerate(ranges):
-
-                                # Get limits
-                                low_lim = indv_range[0]
-                                upper_lim = indv_range[1]
-
-                                # Get age under this range
-                                age_bool = [indv_age_encoding == j for indv_age_encoding in age_encoding]
-                                
-                                # If there is any sample on the age range, get metrics and save them.
-                                if any(age_bool):
-
-                                    # Prediction
-                                    y_pred = torch.stack([y_pred[i] for i in range(len(y_pred)) if age_bool[i]],dim=0)
-
-                                    # Ground truth
-                                    y = torch.stack([y[i] for i in range(len(y)) if age_bool[i]],dim=0)
-
-                                    # Get metrics
-                                    accuracy, precision, recall, f1 = calculate_metrics(y_pred, y)                                                                
-                                    print(accuracy,precision,recall,f1)
-                                    breakpoint()
+                            with open(os.path.join(dir_to_model_report,'ground_truth.csv'),'a',newline = '') as file:
+                                writer = csv.writer(file)                                
+                                for name_count, row in enumerate(y):                                    
+                                    # Data to write                                                    
+                                    writer.writerow([file_names[name_count]] + row.astype(int).tolist())
 
 except KeyboardInterrupt:
     print("Cleaning up...")

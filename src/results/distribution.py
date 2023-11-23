@@ -6,9 +6,28 @@ import os
 from PIL import Image
 from torchvision import transforms
 from types import SimpleNamespace
+import argparse
 
 sys.path.append('/home/juandres/aml/CheXBias/src/')
 from general_functions import *
+
+parser = argparse.ArgumentParser()
+
+# Function for list of strings
+def list_of_ints(arg):
+    return list(map(int, arg.split('/')))    
+
+parser.add_argument('--vae_path',
+                        type=str,
+                        default='None')
+
+# Sex proportion
+parser.add_argument('--sex_proportion',
+                    type=list_of_ints,
+                    default=[50,50]) 
+
+
+args = parser.parse_args()
 
 # Create VAE and load pre-traiened weights
 
@@ -21,23 +40,24 @@ torch.cuda.set_device(device)
 # Instantiate the VAE
 vae = AdaptableVAE(input_channels=1, latent_size=2*64, input_size=224).to(device)
 
-# Model name
-model_name = 'test4.pth'
+# Model patj
+model_path = args.vae_path
 
 # Path for saving mu values
-path_vae_results = '/home/juandres/aml/CheXBias/reports/VAE'
+path_vae_results = model_path
 
 # Load pre-trained weights
-vae.load_state_dict(torch.load('/home/juandres/aml/CheXBias/models/VAE/'+model_name, map_location={'cuda:0': 'cuda:1'}))
+vae.load_state_dict(torch.load(os.path.join(model_path,'best_vae.pth'), map_location={'cuda:0': 'cuda:1'}))
 
 # Get train data
 args = SimpleNamespace(
     subsampler=1,
-    sex_proportion=None,
+    sex_proportion=args.sex_proportion,
     num_output_channels=1,
     classes=['Enlarged Cardiomediastinum', 'Cardiomegaly', 'Lung Opacity', 'Lung Lesion', 'Edema', 'Consolidation', 'Pneumonia', 'Atelectasis', 'Pneumothorax', 'Pleural Effusion', 'Pleural Other', 'Fracture'],
     batch_size=32,
-    num_workers=8
+    num_workers=8,
+    vae_path = args.vae_path
 )
 
 data_loader_train, _ = train_test_dataloaders_sex(args)
@@ -61,7 +81,7 @@ with torch.inference_mode():
         mu_values = mu.detach().cpu().numpy()
 
         # Path of the file for saving values
-        path_file = os.path.join(path_vae_results, model_name.split('.')[0] + '.csv')
+        path_file = os.path.join(path_vae_results, 'distributions.csv')
 
         # Create file if it doesn't exist
         if not os.path.exists(path_file):

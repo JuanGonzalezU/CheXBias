@@ -77,6 +77,29 @@ try:
                         type = str,
                         default = 'Juan',
                         help = 'Name of person that runs this script (Juan OR Sebastian)')
+    # Age range
+    parser.add_argument('--age_range',
+                        type=int,
+                        default=20,
+                        help='Range in years of the groups')   
+
+    # Age range for training
+    parser.add_argument('--age_group_selection',
+                        type=int,
+                        default=0,
+                        help='Choose what of the groups to use for training')  
+
+    # Define on what re-grouping to train
+    parser.add_argument('--grouping',
+                        type=str,
+                        default='sex',
+                        help = 'Choose what subgroup to use for training')  
+
+    # Define name of the experiment
+    parser.add_argument('--experiment',
+                        type=str,
+                        default='0',
+                        help='Number of the experiment')
 
     # Get all arguments
     args = parser.parse_args()
@@ -95,7 +118,7 @@ try:
     from general_functions import *
 
     # Set device (use GPU if available)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
     # Instantiate the VAE
     vae = AdaptableVAE(input_channels=1, latent_size=128, input_size=224).to(device)
@@ -110,47 +133,58 @@ try:
     log_interval = 20  # Adjust this based on your preference
 
     # Training loop
+
+    # Save the best loss
+    best_loss = 1e32
+
+    # Path to results
+    path_to_results = '/home/juandres/aml/CheXBias/models'
+
     for epoch in range(args.epochs):
 
         # Set model in trianing mode
         vae.train()
 
+        # Sum of all loss
+        sum_loss = 0
+   
         # Loop over batches
-        for batch_idx, (_,data,y) in enumerate(data_loader_train):
-            
+        for batch_idx, (_, data, y) in tqdm(enumerate(data_loader_train),total = len(data_loader_train),desc='Training'):
+
             # Move data to device
             data = data.to(device)
             y = y.to(device)
 
             # Forward pass
             recon_batch, mu, log_var, y_pred = vae(data)
-            
+
             # Compute the loss
             loss = loss_function_VAE(recon_batch, data, y, y_pred, mu, log_var)
+            sum_loss += loss
 
             # Zero grad the optimizer
             optimizer.zero_grad()
-            
+
             # Backward pass and optimization
             loss.backward()
 
             # Step the optimizer
             optimizer.step()
 
-            # Print training statistics
-            #if batch_idx % log_interval == 1:            
-            print(f'Train Epoch: {epoch+1}/{args.epochs} [{batch_idx * len(data)}/{len(data_loader_train.dataset)}] Loss: {loss.item()/len(data)}')
-            if batch_idx % log_interval == 0:
-                torch.cuda.empty_cache()
+        # Calculate average loss
+        sum_loss /= len(data_loader_train)
+        print(f'Train Epoch: {epoch+1}/{args.epochs} [{batch_idx * len(data)}/{len(data_loader_train.dataset)}] Loss: {sum_loss}')
 
-    # Optionally, you can save the trained model
-    if args.my_name == 'Juan':
-        torch.save(vae.state_dict(), '/home/juandres/aml/CheXBias/models/VAE/'+args.save)
-        pass
-    else:
-        torch.save(vae.state_dict(), '/media/disk2/srodriguez47/ProyectoAML/CheXBias/models/test.pth')
+        # Save mode if it is better
+        if sum_loss < best_loss:
+              
+            # Get path for saving results
+            path_model = os.path.join(path_to_results,'Experiment_'+args.experiment,args.grouping,args.save.split('.')[0],'best_vae.pth')    
+            # Save model
+            torch.save(vae.state_dict(),path_model)  
+            # Update best loss
+            best_loss = sum_loss
 
 except KeyboardInterrupt:
-    #breakpoint()
     print("Cleaning up...")
     torch.cuda.empty_cache()
