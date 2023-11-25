@@ -32,13 +32,13 @@ try:
     # Batches
     parser.add_argument('--batch_size',
                         type=int,
-                        default=32,
+                        default=400,
                         help = 'Training batch size')
 
     # Number of epohcs
     parser.add_argument('--epochs',
                         type=int,
-                        default=2,
+                        default=5,
                         help='Number of epochs for training')
 
     # Save model
@@ -50,7 +50,7 @@ try:
     # Sub sampler
     parser.add_argument('--subsampler',
                         type=float,
-                        default=0.1,
+                        default=1,
                         help = 'Percentage of data to be used')
 
 
@@ -92,13 +92,13 @@ try:
     # Define on what re-grouping to train
     parser.add_argument('--grouping',
                         type=str,
-                        default='sex',
+                        default='age',
                         help = 'Choose what subgroup to use for training')  
 
     # Define name of the experiment
     parser.add_argument('--experiment',
                         type=str,
-                        default='0',
+                        default='2',
                         help='Number of the experiment')
 
     # Get all arguments
@@ -127,7 +127,7 @@ try:
     optimizer = optim.Adam(vae.parameters(), lr=args.lr)
 
     # Load data
-    data_loader_train, data_loader_val = train_test_dataloaders_sex(args)
+    data_loader_train, data_loader_val = train_test_dataloaders_age(args)
     
     # Log interval
     log_interval = 20  # Adjust this based on your preference
